@@ -1,5 +1,8 @@
 import os
 import cv2
+
+from argparse import ArgumentParser
+
 from keras import backend as K
 from keras.models import load_model
 from keras.preprocessing import image
@@ -30,9 +33,7 @@ video_height = 1920#640#512
 video_width = 1080#480#256
 
 def init_model():
-    # 1: Build the Keras model
-
-    K.clear_session() # Clear previous models from memory.
+    K.clear_session()
 
     model = ssd_300(image_size=(img_height, img_width, 3),
                 n_classes=20,
@@ -58,18 +59,16 @@ def init_model():
                 top_k=200,
                 nms_max_output_size=400)
 
-    # 2: Load the trained weights into the model.
-
     # TODO: Set the path of the trained weights.
     weights_path = './VGG_VOC0712Plus_SSD_300x300_ft_iter_160000.h5'
     model.load_weights(weights_path, by_name=True)
 
-    # 3: Compile the model so that Keras won't complain the next time you load it.
     adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
     ssd_loss = SSDLoss(neg_pos_ratio=3, alpha=1.0)
     model.compile(optimizer=adam, loss=ssd_loss.compute_loss)
 
-    # print(model.summary())
+    print(model.summary())
+
     return model
 
 
@@ -77,15 +76,12 @@ def get_img_with_bbox(model, frame):
 
     xmin, ymin, xmax, ymax = [0 for i in range(4)]
 
-    orig_images = [] # Store the images here.
-    input_images = [] # Store resized versions of the images here.
+    orig_images = []
+    input_images = []
 
-    # # We'll only load one image in this example.
-    # img_path = 'examples/vipad3.png'
     print(frame.shape)
     orig_images.append(frame)
-    #frame = cv2.resize(frame, (img_height, img_width))
-    #img = image.load_img(img_path, target_size=(img_height, img_width))
+
     img = Image.fromarray(frame)
     img = img.resize((img_height, img_width), Image.ANTIALIAS)
 
@@ -94,7 +90,6 @@ def get_img_with_bbox(model, frame):
     input_images = np.array(input_images)
 
     y_pred = model.predict(input_images)
-    #print('pred: ', y_pred)
 
     confidence_threshold = 0.5
 
@@ -107,7 +102,6 @@ def get_img_with_bbox(model, frame):
     print('   class   conf xmin   ymin   xmax   ymax')
     print(y_pred_thresh[0])
 
-    # Display the image and draw the predicted boxes onto it.
 
     # Set the colors for the bounding boxes
     classes = ['background',
@@ -118,9 +112,7 @@ def get_img_with_bbox(model, frame):
             'sheep', 'sofa', 'train', 'tvmonitor']
 
     for box in y_pred_thresh[0]:
-        #if box[0] != 15.0:
-        #    continue
-        # Transform the predicted bounding boxes for the 512x512 image to the original image dimensions.
+        # Transform the predicted bounding boxes to the original image size.
         xmin = int(np.round(box[2] * orig_images[0].shape[1] / img_width))
         ymin = int(np.round(box[3] * orig_images[0].shape[0] / img_height))
         xmax = int(np.round(box[4] * orig_images[0].shape[1] / img_width))
@@ -140,59 +132,78 @@ def resize_and_rotate_frame(frame):
     return frame
 
 
+def inference_on_video(model, path_to_video, path_to_save_output=None):
+
+    file = path_to_video.split('/')[-1]
+
+    if file.endswith('.mp4') or file.endswith('.avi') or file.endswith('.MOV'):
+        print("Processing %s" % file)
+        cap = cv2.VideoCapture(path_to_video)
+        out = None
+
+        ### cap ###
+        bbox_found = False
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            # frame = resize_and_rotate_frame(frame)
+
+            if out is None and path_to_save_output:
+                fourcc = cv2.VideoWriter_fourcc(*'XVID')
+                out = cv2.VideoWriter(path_to_save_output, fourcc, 30.0, (video_width, video_height))
+                print('Save to ', path_to_save_output)
+
+            if not bbox_found:
+                xmin, ymin, xmax, ymax = get_img_with_bbox(model, frame)
+                if xmin is not None:
+                    # bbox_found = True
+                    low_crop_threshold = ymin
+                    high_crop_threshold = ymax
+                else:
+                    print('no bbox')
+                    # continue
+                print(xmin, ymin, xmax, ymax)
+
+            frame_cp = np.array(frame).copy()
+            # frame_cp = frame[low_crop_threshold : high_crop_threshold, :]
+            # height, width = frame_cp.shape[:2]
+            # frame_cp = cv2.resize(frame_cp, (video_width, video_height), interpolation = cv2.INTER_CUBIC)
+
+            cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (255, 0, 0), 3)
+            # cv2.imshow('frame', frame)
+            print('final crop res: ', frame_cp.shape)
+            out.write(frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        cap.release()
+        cv2.destroyAllWindows()
+
+
 def main():
+    argparser = ArgumentParser()
+    argparser.add_argument('--video', type=str, required=True)
+    args = argparser.parse_args()
+
     model = init_model()
 
-    cur_dir = '/home/matsvei.rozanau/Documents/fittable_test' #'/home/matsvei.rozanau/dev/pose-analytics/videos/test_video'
-    for dir_with_vids in os.listdir(cur_dir):
-        #if not os.path.isdir(dir_with_vids):
-        #    continue
-        for file in os.listdir(os.path.join(cur_dir, dir_with_vids)):
-            if file.endswith('.mp4') or file.endswith('.avi') or file.endswith('.MOV'):
-                print("Processing %s" % file)
-                videofile = os.path.join(cur_dir, dir_with_vids, file)
-                cap = cv2.VideoCapture(videofile)
-                out = None
+    files = list(os.walk(args.video))
 
-                ### cap ###
-                bbox_found = False
-                while cap.isOpened():
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                    #frame = resize_and_rotate_frame(frame)
-
-                    if out is None:
-                        file_to_save = os.path.join(cur_dir, dir_with_vids, file.split('.')[0] + '_ssd.avi')
-                        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                        out = cv2.VideoWriter(file_to_save, fourcc, 30.0, (video_width, video_height))
-
-                    if not bbox_found:
-                        xmin, ymin, xmax, ymax = get_img_with_bbox(model, frame)
-                        if xmin is not None:
-                            #bbox_found = True
-                            low_crop_threshold = ymin
-                            high_crop_threshold = ymax
-                        else:
-                            print('no bbox')
-                            #continue
-                        print(xmin, ymin, xmax, ymax)
-
-                    frame_cp = np.array(frame).copy()
-                    #frame_cp = frame[low_crop_threshold : high_crop_threshold, :]
-                    #height, width = frame_cp.shape[:2]
-                    #frame_cp = cv2.resize(frame_cp, (video_width, video_height), interpolation = cv2.INTER_CUBIC)
-
-                    cv2.rectangle(frame, (xmin, ymin),(xmax, ymax),(255,0,0),3)
-                    # cv2.imshow('frame', frame)
-                    print('final crop res: ', frame_cp.shape)
-                    out.write(frame)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
-                cap.release()
-                #cv2.destroyAllWindows()
-
-                ### end cap ###
+    # Check if the path throwed is a file or directory with files
+    if files == []:
+        root = '/'.join(args.video.split('/')[:-1])
+        filename_to_save = args.video.split('/')[-1].split('.')[0] + '_ssd.avi'
+        path_to_save = os.path.join(root, filename_to_save)
+        inference_on_video(model, args.video, path_to_save)
+    else:
+        for root, dirs, filenames in files:
+            if filenames == []:
+                continue
+            for inner_file in filenames:
+                path_to_file = os.path.join(root, inner_file)
+                filename_to_save = inner_file.split('.')[0] + '_ssd.avi'
+                path_to_save_file = os.path.join(root, filename_to_save)
+                inference_on_video(model, path_to_file, path_to_save_file)
 
 
 if __name__=='__main__':
