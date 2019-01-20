@@ -8,7 +8,6 @@ from keras import backend as K
 from keras.models import load_model
 from keras.preprocessing import image
 from keras.optimizers import Adam
-from imageio import imread
 import numpy as np
 from matplotlib import pyplot as plt
 from PIL import Image
@@ -98,7 +97,7 @@ def get_img_with_bbox(model, frame):
     orig_images.append(frame)
 
     img = Image.fromarray(frame)
-    img = img.resize((img_height, img_width), Image.ANTIALIAS)
+    img = img.resize((img_height, img_width))
     img = image.img_to_array(img)
     input_images.append(img)
     input_images = np.array(input_images)
@@ -118,8 +117,6 @@ def get_img_with_bbox(model, frame):
     print(y_pred_decoded[0])
 
     for box in y_pred_decoded[0]:
-        assert orig_images[0].shape[0] == video_height
-        assert orig_images[0].shape[1] == video_width
         # Transform the predicted bounding boxes to the original image size.
         xmin = box[2] * video_width / img_width
         ymin = box[3] * video_height / img_height
@@ -169,7 +166,6 @@ def inference_on_video(model, path_to_video, path_to_save_output=None):
 
             if not bbox_found:
                 xmin, ymin, xmax, ymax = get_img_with_bbox(model, frame)
-                print(xmin, ymin, xmax, ymax)
 
             cv2.rectangle(frame, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (255, 0, 0), 3)
             out.write(frame)

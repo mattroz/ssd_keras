@@ -389,7 +389,7 @@ class RandomTranslate:
                                    box_filter=self.box_filter,
                                    background=self.background,
                                    labels_format=self.labels_format)
-
+        
     def __call__(self, image, labels=None):
 
         p = np.random.uniform(0,1)
@@ -592,7 +592,7 @@ class RandomScale:
                            box_filter=self.box_filter,
                            background=self.background,
                            labels_format=self.labels_format)
-
+        
     def __call__(self, image, labels=None):
 
         p = np.random.uniform(0,1)
@@ -740,7 +740,7 @@ class RandomRotate:
     '''
     Randomly rotates images counter-clockwise.
     '''
-
+    
     def __init__(self,
                  angles=[90, 180, 270],
                  prob=0.5,

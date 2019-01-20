@@ -502,7 +502,7 @@ class RandomPatch:
                                     box_filter=self.box_filter,
                                     background=self.background,
                                     labels_format=self.labels_format)
-
+        
     def __call__(self, image, labels=None, return_inverter=False):
 
         p = np.random.uniform(0,1)
@@ -669,7 +669,8 @@ class RandomPatchInf:
                                     box_filter=self.box_filter,
                                     background=self.background,
                                     labels_format=self.labels_format)
-
+        
+    
     def __call__(self, image, labels=None, return_inverter=False):
 
         img_height, img_width = image.shape[:2]
